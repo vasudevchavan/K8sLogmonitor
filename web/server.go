@@ -40,6 +40,7 @@ func NewServer() (*Server, error) {
 	registry.RegisterTool("k8s_logs", tools.NewK8sTool(k8sClient))
 	registry.RegisterTool("k8s_context", tools.NewK8sContextTool(k8sClient))
 	registry.RegisterTool("failure_detection", tools.NewFailureDetectionTool())
+	registry.RegisterTool("github_issues", tools.NewGitHubTool(os.Getenv("GITHUB_TOKEN")))
 	registry.RegisterTool("llm_recommendation", tools.NewLLMTool(os.Getenv("LLM_API_KEY")))
 
 	agent := agents.NewLogMonitorAgent(registry)

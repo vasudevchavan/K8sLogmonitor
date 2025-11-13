@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/vasudevchavan/K8sLogmonitor/adk"
+	"github.com/vasudevchavan/K8sLogmonitor/tools"
 )
 
 type LogMonitorAgent struct {
@@ -107,6 +108,24 @@ func (a *LogMonitorAgent) Execute(ctx context.Context, input string) (string, er
 		log.Printf("Failed to get K8s context: %v", err)
 	}
 	
+	// Search GitHub issues for similar problems
+	githubTool, exists := a.registry.GetTool("github_issues")
+	githubIssues := "No related issues found."
+	if exists {
+		query := strings.Join(failures, " ")
+		issues, err := githubTool.Execute(ctx, map[string]interface{}{
+			"query": query,
+			"repo":  "kubernetes/kubernetes",
+		})
+		if err == nil {
+			if issueList, ok := issues.([]tools.GitHubIssue); ok {
+				if gt, ok := githubTool.(*tools.GitHubTool); ok {
+					githubIssues = gt.FormatIssuesForLLM(issueList)
+				}
+			}
+		}
+	}
+	
 	// Generate recommendations with full context
 	llmTool, exists := a.registry.GetTool("llm_recommendation")
 	if !exists {
@@ -117,10 +136,11 @@ func (a *LogMonitorAgent) Execute(ctx context.Context, input string) (string, er
 Namespace: %s
 Failures: %s
 Logs: %s
-K8s Context: %v`,
-		podName, namespace, strings.Join(failures, ", "), logs, k8sContext)
+K8s Context: %v
+%s`,
+		podName, namespace, strings.Join(failures, ", "), logs, k8sContext, githubIssues)
 	
-	log.Printf("DEBUG: Calling LLM with enhanced context")
+	log.Printf("DEBUG: Calling LLM with enhanced context including GitHub issues")
 	
 	recommendation, err := llmTool.Execute(ctx, map[string]interface{}{
 		"context": contextStr,
