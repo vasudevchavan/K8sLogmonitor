@@ -112,15 +112,28 @@ func (a *LogMonitorAgent) Execute(ctx context.Context, input string) (string, er
 	githubTool, exists := a.registry.GetTool("github_issues")
 	githubIssues := "No related issues found."
 	if exists {
-		query := strings.Join(failures, " ")
+		// Search based on pod name and failure type
+		query := podName // Search for pod name in issue titles
+		if strings.Contains(strings.Join(failures, " "), "oom") {
+			query += " oom memory"
+		} else if strings.Contains(strings.Join(failures, " "), "crash") {
+			query += " crash"
+		} else {
+			query += " image"
+		}
+		log.Printf("DEBUG: Searching GitHub for: %s", query)
 		issues, err := githubTool.Execute(ctx, map[string]interface{}{
 			"query": query,
-			"repo":  "kubernetes/kubernetes",
+			"repo":  "vasudevchavan/K8sLogmonitor",
 		})
-		if err == nil {
+		if err != nil {
+			log.Printf("DEBUG: GitHub search error: %v", err)
+		} else {
 			if issueList, ok := issues.([]tools.GitHubIssue); ok {
+				log.Printf("DEBUG: Found %d GitHub issues", len(issueList))
 				if gt, ok := githubTool.(*tools.GitHubTool); ok {
 					githubIssues = gt.FormatIssuesForLLM(issueList)
+					log.Printf("DEBUG: GitHub issues formatted: %s", githubIssues)
 				}
 			}
 		}

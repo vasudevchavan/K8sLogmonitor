@@ -51,7 +51,7 @@ func (t *LLMTool) GenerateRecommendation(context string) (string, error) {
 		return "No API key provided. Set LLM_API_KEY environment variable.", nil
 	}
 
-	prompt := fmt.Sprintf("Analyze these Kubernetes pod failures and provide specific troubleshooting recommendations:\n\n%s\n\nProvide actionable steps to resolve these issues.", context)
+	prompt := fmt.Sprintf("Analyze these Kubernetes pod failures and provide specific troubleshooting recommendations. Include references to any GitHub issues mentioned:\n\n%s\n\nProvide actionable steps to resolve these issues. If GitHub issues are mentioned, reference them in your recommendations.", context)
 
 	reqBody := OpenAIRequest{
 		Model: "gpt-3.5-turbo",
@@ -119,17 +119,38 @@ func (t *LLMTool) Execute(ctx context.Context, input map[string]interface{}) (in
 }
 
 func (t *LLMTool) getFallbackRecommendation(context string) string {
+	var recommendation string
+	
 	if strings.Contains(context, "pull image") {
-		return "Image Pull Error - Check: 1) Image name/tag correctness 2) Registry accessibility 3) Image pull secrets 4) Network connectivity"
+		recommendation = "Image Pull Error - Check: 1) Image name/tag correctness 2) Registry accessibility 3) Image pull secrets 4) Network connectivity"
+	} else if strings.Contains(context, "oomkilled") {
+		recommendation = "OOM Error - Increase memory limits, check resource usage patterns, optimize application memory usage"
+	} else if strings.Contains(context, "crashloopbackoff") {
+		recommendation = "CrashLoop Error - Check application logs, verify startup commands, review health checks, fix configuration issues"
+	} else if strings.Contains(context, "probe failed") {
+		recommendation = "Health Check Failed - Verify probe endpoints, adjust timeouts, check application startup time"
+	} else {
+		recommendation = "General troubleshooting: 1) Check pod events 2) Review logs 3) Verify resources 4) Check dependencies"
 	}
-	if strings.Contains(context, "oomkilled") {
-		return "OOM Error - Increase memory limits, check resource usage patterns, optimize application memory usage"
+	
+	// Add GitHub issues if present in context
+	if strings.Contains(context, "Related GitHub Issues:") {
+		lines := strings.Split(context, "\n")
+		for _, line := range lines {
+			if strings.Contains(line, "Issue #") && strings.Contains(line, "github.com") {
+				// Extract issue number and URL
+				parts := strings.Split(line, "Issue #")
+				if len(parts) > 1 {
+					issueInfo := strings.Split(parts[1], ":")
+					if len(issueInfo) > 0 {
+						issueNum := issueInfo[0]
+						recommendation += fmt.Sprintf("\n\n🔗 See GitHub Issue #%s: https://github.com/vasudevchavan/K8sLogmonitor/issues/%s", issueNum, issueNum)
+					}
+				}
+				break
+			}
+		}
 	}
-	if strings.Contains(context, "crashloopbackoff") {
-		return "CrashLoop Error - Check application logs, verify startup commands, review health checks, fix configuration issues"
-	}
-	if strings.Contains(context, "probe failed") {
-		return "Health Check Failed - Verify probe endpoints, adjust timeouts, check application startup time"
-	}
-	return "General troubleshooting: 1) Check pod events 2) Review logs 3) Verify resources 4) Check dependencies"
+	
+	return recommendation
 }
