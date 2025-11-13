@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/vasudevchavan/K8sLogmonitor/adk"
-	"github.com/vasudevchavan/K8sLogmonitor/tools"
 )
 
 type LogMonitorAgent struct {
@@ -108,34 +107,31 @@ func (a *LogMonitorAgent) Execute(ctx context.Context, input string) (string, er
 		log.Printf("Failed to get K8s context: %v", err)
 	}
 	
-	// Search GitHub issues for similar problems
-	githubTool, exists := a.registry.GetTool("github_issues")
+	// Search GitHub issues using GitHub agent
+	githubAgent := NewGitHubAgent(a.registry)
 	githubIssues := "No related issues found."
-	if exists {
-		// Search based on pod name and failure type
-		query := podName // Search for pod name in issue titles
-		if strings.Contains(strings.Join(failures, " "), "oom") {
-			query += " oom memory"
-		} else if strings.Contains(strings.Join(failures, " "), "crash") {
-			query += " crash"
-		} else {
-			query += " image"
-		}
-		log.Printf("DEBUG: Searching GitHub for: %s", query)
-		issues, err := githubTool.Execute(ctx, map[string]interface{}{
-			"query": query,
-			"repo":  "vasudevchavan/K8sLogmonitor",
-		})
-		if err != nil {
-			log.Printf("DEBUG: GitHub search error: %v", err)
-		} else {
-			if issueList, ok := issues.([]tools.GitHubIssue); ok {
-				log.Printf("DEBUG: Found %d GitHub issues", len(issueList))
-				if gt, ok := githubTool.(*tools.GitHubTool); ok {
-					githubIssues = gt.FormatIssuesForLLM(issueList)
-					log.Printf("DEBUG: GitHub issues formatted: %s", githubIssues)
-				}
-			}
+	
+	// Search based on pod name and failure type
+	query := podName
+	if strings.Contains(strings.Join(failures, " "), "oom") {
+		query += " oom memory"
+	} else if strings.Contains(strings.Join(failures, " "), "crash") {
+		query += " crash"
+	} else {
+		query += " image"
+	}
+	log.Printf("DEBUG: Searching GitHub for: %s", query)
+	
+	// Use GitHub agent to search issues
+	githubInput := fmt.Sprintf("%s|vasudevchavan/K8sLogmonitor", query)
+	githubResult, err := githubAgent.Execute(ctx, githubInput)
+	if err != nil {
+		log.Printf("DEBUG: GitHub agent error: %v", err)
+	} else {
+		log.Printf("DEBUG: GitHub agent result: %s", githubResult)
+		// Extract formatted issues from agent result
+		if strings.Contains(githubResult, "Related GitHub Issues:") {
+			githubIssues = githubResult
 		}
 	}
 	
